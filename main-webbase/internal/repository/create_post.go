@@ -144,8 +144,26 @@ func ReplaceRoleVisibility(db *mongo.Database, postID bson.ObjectID, visibility 
 }
 
 func FindUserInfo(col *mongo.Collection, userID bson.ObjectID, ctx context.Context) (user dto.UserInfoResponse, err error) {
-	err = col.FindOne(ctx, bson.M{"_id": userID, "status": "active"}).Decode(&user)
-	return user, err
+    // Some databases may not store a user status; fall back gracefully.
+    // 1) Try decode into UserInfoResponse without enforcing status
+    if e := col.FindOne(ctx, bson.M{"_id": userID}).Decode(&user); e == nil {
+        return user, nil
+    } else {
+        err = e
+    }
+    // 2) Fallback to models.User schema and map minimal fields
+    var mu models.User
+    if e := col.FindOne(ctx, bson.M{"_id": userID}).Decode(&mu); e == nil {
+        user.ID = mu.ID
+        user.FirstName = mu.FirstName
+        user.LastName = mu.LastName
+        user.Email = mu.Email
+        if user.Status == "" {
+            user.Status = "active"
+        }
+        return user, nil
+    }
+    return user, err
 }
 
 // GetIndividualPostDetail

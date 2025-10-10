@@ -7,19 +7,21 @@
 package main
 
 import (
-	"log"
-	"os"
+    "log"
+    "os"
+    "strings"
 
-	_ "main-webbase/docs"
+    _ "main-webbase/docs"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/swagger"
-	"github.com/joho/godotenv"
+    "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v2/middleware/cors"
+    "github.com/gofiber/swagger"
+    "github.com/joho/godotenv"
 
-	"main-webbase/config"
-	"main-webbase/database"
-	"main-webbase/internal/middleware"
-	"main-webbase/internal/routes"
+    "main-webbase/config"
+    "main-webbase/database"
+    "main-webbase/internal/middleware"
+    "main-webbase/internal/routes"
 )
 
 func main() {
@@ -43,8 +45,29 @@ func main() {
 
 	db := client.Database("unicom")
 
-	// Fiber app
-	app := fiber.New()
+    // Fiber app
+    app := fiber.New()
+
+    // CORS: allow dev frontend and handle preflight before auth
+    allowed := os.Getenv("FRONTEND_ORIGINS")
+    if allowed == "" {
+        allowed = "http://localhost:5173,http://127.0.0.1:5173"
+    }
+    app.Use(cors.New(cors.Config{
+        AllowOrigins:     strings.Join(strings.Split(allowed, ","), ","),
+        AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+        ExposeHeaders:    "Authorization",
+        AllowCredentials: true,
+    }))
+
+    // Short-circuit OPTIONS early (in case any middleware below would block it)
+    app.Use(func(c *fiber.Ctx) error {
+        if c.Method() == fiber.MethodOptions {
+            return c.SendStatus(fiber.StatusNoContent)
+        }
+        return c.Next()
+    })
 
 	// app.Use(func(c *fiber.Ctx) error {
 	// 	c.Locals("user_id", "68bd6ff6f80438824239b8a9")
@@ -58,11 +81,12 @@ func main() {
 	// Health
 	app.Get("/healthz", func(c *fiber.Ctx) error { return c.SendString("ok") })
 
-	// Get JWT with login
-	routes.SetupAuth(app)
+    // Get JWT with login (open)
+    routes.SetupAuth(app)
 
-	app.Use(middleware.JWTUidOnly(secret))
-	app.Use(middleware.InjectViewer(db))
+    // Authn/Z for protected routes
+    app.Use(middleware.JWTUidOnly(secret))
+    app.Use(middleware.InjectViewer(db))
 
 	// Routes
 	routes.SetupRoutesUser(app)
