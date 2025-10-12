@@ -4,6 +4,7 @@ import (
 	"context"
 	"main-webbase/dto"
 	"main-webbase/internal/services"
+	mid "main-webbase/internal/middleware"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,8 +13,8 @@ import (
 
 func LikeUnlikeHandler(client *mongo.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		user_id, ok := services.FetchUserID(c)
-		if !ok {
+		user_id, err := mid.UIDObjectID(c)
+		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).
 				JSON(dto.ErrorResponse{Error: "missing userId in context"})
 		}

@@ -99,6 +99,7 @@ func main() {
 	routes.SetupRoutesEvent(app, client)
 	routes.SetupRoutesPost(app, client)
 	routes.CommentRoutes(app, client)
+	routes.LikeRoutes(app, client)
 
 	// RUN SERVER
 	log.Fatal(app.Listen(":" + cfg.Port))

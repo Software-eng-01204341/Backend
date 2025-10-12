@@ -51,7 +51,7 @@ func Like(ctx context.Context, client *mongo.Client, body dto.LikeRequestDTO, us
 	likeCount, _ = repository.CountLikes(ctx, likesCol, targetID, body.TargetType)
 
 	return fiberStatusOK(), bson.M{
-		"Error":       ternary(likedNow, "liked", "unliked"),
+		"Status":       ternary(likedNow, "liked", "unliked"),
 		"target_id":   body.TargetID,
 		"target_type": body.TargetType,
 		"liked":       likedNow,  // เปลี่ยนชื่อ field ให้ FE ใช้ง่าย
