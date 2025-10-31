@@ -113,6 +113,7 @@ func CreateEventWithSchedules(body dto.EventRequestDTO, ctx context.Context) (dt
 type VisibleEventQuery struct {
     Roles    []string
     Q        string
+	Authors  []bson.ObjectID
 }
 
 func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userOrgSets []string, q VisibleEventQuery,) ([]dto.EventFeed, error) {
@@ -255,6 +256,7 @@ func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userO
 			Status:               it.ev.Status,
 			Have_form:            it.ev.Have_form,
 			Schedules:            []models.EventSchedule{it.nextSch}, // only closest
+			CreatedAt:            it.ev.CreatedAt,
 		}
 		out = append(out, feed)
 	}

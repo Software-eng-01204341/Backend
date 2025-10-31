@@ -19,6 +19,7 @@ import (
 type EventFilter struct {
     Roles    []string
     Q        string
+	AuthorIDs []bson.ObjectID
 }
 
 func GetEventsFilter(ctx context.Context, f EventFilter) ([]models.Event, error) {
@@ -69,6 +70,11 @@ func GetEventsFilter(ctx context.Context, f EventFilter) ([]models.Event, error)
             },
         })
     }
+
+	if len(f.AuthorIDs) > 0 {
+		and = append(and, bson.M{"user_id" : bson.M{"$in": f.AuthorIDs}})
+	}
+
 
     filter := bson.M{}
     if len(and) > 0 {

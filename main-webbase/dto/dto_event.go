@@ -48,6 +48,7 @@ type EventFeed struct {
 	Visibility           *models.Visibility `json:"visibility,omitempty"`
 	Status               string             `json:"status,omitempty"`
 	Have_form            bool               `json:"have_form,omitempty"`
+	CreatedAt		   	 *time.Time          `json:"created_at,omitempty"`	
 
 	Schedules []models.EventSchedule `json:"schedules"`
 }

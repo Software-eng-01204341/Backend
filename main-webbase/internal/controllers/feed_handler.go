@@ -19,17 +19,6 @@ type FeedCursorEnvelope struct {
 	HasMore    bool             `json:"has_more" example:"true"`
 }
 
-// @Summary      Get posts visible to the viewer
-// @Description  List posts that the viewer has permission to see, based on their organizational unit and position.
-// @Tags         feed
-// @Produce      json
-// @Security     BearerAuth
-// @Param        limit   query  int     false  "Max items per page" minimum(1) maximum(20) default(10)
-// @Param        cursor  query  string  false  "Opaque next-page cursor (base64)"
-// @Success      200     {object} controllers.FeedCursorEnvelope
-// @Failure      401     {object} dto.ErrorResponse
-// @Failure      500     {object} dto.ErrorResponse
-// @Router       /posts [get]
 func GetPostsVisibilityCursor(client *mongo.Client) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit := int64(c.QueryInt("limit", 10))

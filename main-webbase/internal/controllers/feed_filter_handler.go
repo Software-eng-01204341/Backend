@@ -13,6 +13,32 @@ import (
 	"main-webbase/internal/models"
 	"main-webbase/internal/repository"
 )
+// FeedHandler godoc
+// @Summary List feed posts
+// @Description ดึงรายการโพสต์ที่ผู้ใช้ปัจจุบันมองเห็นได้ พร้อมกรอง/จัดเรียงและแบ่งหน้า
+// @Description พารามิเตอร์ที่รองรับ:
+// @Description  - `q` (string): คำค้นหาแบบ full-text ในข้อความโพสต์
+// @Description  - `role` (string, comma-separated): รายการบทบาทเพื่อกรอง เช่น `teacher,student`
+// @Description  - `category` (string, comma-separated): รายการหมวดหมู่เพื่อกรอง เช่น `announcement,event`
+// @Description  - `author` (string, comma-separated): รายการ ObjectID (hex 24) ของผู้เขียน
+// @Description  - `limit` (int): จำนวนต่อหน้า 1–20 (ดีฟอลต์ 20)
+// @Description  - `cursor` (string): ObjectID (hex 24) สำหรับทำ cursor pagination
+// @Description  - `sort` (string): โหมดเรียงลำดับ `time` (ค่าเริ่มต้น) หรือ `popular`
+// @Tags feed
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param q query string false "Search text (full-text)"
+// @Param role query string false "CSV roles filter e.g. teacher,student"
+// @Param category query string false "CSV categories filter e.g. announcement,event"
+// @Param author query string false "CSV author ObjectIDs (hex24)"
+// @Param limit query int false "Items per page (1-20). Default 20"
+// @Param cursor query string false "Cursor (Mongo ObjectID hex24)"
+// @Param sort query string false "Sort mode: time | popular" Enums(time, popular) default(time)
+// @Success 200 {object} map[string]interface{} "items ([]Post-like), next_cursor (hex24)"
+// @Failure 401 {object} map[string]string "Unauthorized - user not authenticated"
+// @Failure 500 {object} map[string]string "Internal server error"
+// @Router /feed [get]
 
 // ใช้แบบ: posts.Get("/feed", controllers.FeedHandler(d.Client))
 func FeedHandler(client *mongo.Client) fiber.Handler {

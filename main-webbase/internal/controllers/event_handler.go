@@ -149,13 +149,21 @@ func CreateEventHandler() fiber.Handler {
 
 // GetAllVisibleEventHandler godoc
 // @Summary Get all visible events
-// @Description Retrieve all events that the current user can see. This endpoint returns events visible to the current authenticated user. You can optionally filter the events using query parameters: \n - `q` (string): Search text that matches the event's topic or description (case-insensitive). \n - `role` (string, comma-separated): Filter by user role or organization path. Each value can be: \n - A position key, e.g., `Lecturer` (matches `postedas.position_key`, case-insensitive exact match). \n - An organization path, e.g., `/fac/eng/com` (matches `org_of_content`). \n - Subtree prefix is supported using `/*`, e.g., `/fac/eng/*` matches `/fac/eng/com` or `/fac/eng/math`. \n If no filters are applied, all events that the user can see (based on visibility rules) are returned. \n Visibility rules: \n - `public`: visible to everyone. \n - `org`: visible only to users whose organization is included in the audience. \n - `draft`: visible only to organizers within the same organization.
+// @Description Retrieve all events that the current user can see. Optional filters:
+// @Description  - `q` (string): search in `topic` or `description` (case-insensitive)
+// @Description  - `role` (CSV): role or org path; role matches `postedas.position_key` (case-insensitive full match), org path matches `org_of_content`, supports subtree with suffix `/*`
+// @Description  - `author` (CSV of ObjectID hex): filter by creator (matches `created_by` or `postedas.user_id` depending on your schema)
+// @Description Visibility rules:
+// @Description  - `public`: visible to everyone
+// @Description  - `org`: visible to users whose org is included in the audience
+// @Description  - `draft`: visible only to organizers in the same org
 // @Tags events
 // @Accept json
 // @Produce json
 // @Param q query string false "Search text in topic or description"
-// @Param role query string false "Comma-separated list of roles or org paths to filter"
-// @Success 200 {array} map[string]interface{} "Array of visible events with their next upcoming schedule"
+// @Param role query string false "CSV roles/org paths filter e.g. Lecturer,/fac/eng/*"
+// @Param author query string false "CSV author ObjectIDs (hex24), e.g. 64e4...,64e5..."
+// @Success 200 {array} dto.EventFeed "Array of visible events each with its next upcoming schedule"
 // @Failure 401 {object} map[string]string "Unauthorized - user not authenticated"
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /event [get]
@@ -179,6 +187,14 @@ func GetAllVisibleEventHandler() fiber.Handler {
 		// ---------- parse filters ----------
         q := c.Query("q")
 		roles := splitCSVFilter(c.Query("role"))
+		authorsHex := splitCSVFilter(c.Query("author"))
+		
+		authors := make([]bson.ObjectID, 0, len(authorsHex))
+		for _, h := range authorsHex {
+			if oid, err := bson.ObjectIDFromHex(strings.TrimSpace(h)); err == nil {
+				authors = append(authors, oid)
+			}
+		}
 
 		// events, err := services.GetVisibleEvents(viewerID, ctx, orgSets)
 		events, err := services.GetVisibleEventsFiltered(
@@ -188,6 +204,7 @@ func GetAllVisibleEventHandler() fiber.Handler {
             services.VisibleEventQuery{
                 Roles:    roles,
                 Q:        q,
+				Authors:  authors,
             },
         )
 
