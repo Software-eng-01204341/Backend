@@ -22,10 +22,15 @@ func CreateEventWithSchedules(body dto.EventRequestDTO, ctx context.Context) (dt
 	if err != nil {
 		return dto.EventCreateResult{}, fmt.Errorf("invalid NodeID: %w", err)
 	}
+	userID, err := bson.ObjectIDFromHex(body.UserID)
+	if err != nil {
+		return dto.EventCreateResult{}, fmt.Errorf("invalid UserID: %w", err)
+	}
 
 	event := models.Event{
 		ID:               bson.NewObjectID(),
 		NodeID:           nodeID,
+		UserID:           userID,
 		Topic:            body.Topic,
 		Description:      body.Description,
 		PictureURL:       body.PictureURL,
@@ -280,7 +285,7 @@ func CheckVisibleEvent(ctx context.Context, event *models.Event, userOrgs []stri
 			return true
 
 		// 2. Access = Selected path only
-		case "org":
+		case "private":
 			if len(v.Audience) == 0 {
 				return false
 			}

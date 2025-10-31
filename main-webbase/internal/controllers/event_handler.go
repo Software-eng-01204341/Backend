@@ -53,8 +53,16 @@ func CreateEventHandler() fiber.Handler {
 			body.PostedAs = &models.PostedAs{}
 		}
 
+		uid, err := middleware.UIDFromLocals(c)
+		if err != nil {
+			return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+		}
+		body.UserID = uid
+
 		// Parse minimal required form fields
-		body.NodeID = c.FormValue("NodeID")
+		body.NodeID = c.FormValue("node_id")
+		if body.NodeID == "" { body.NodeID = c.FormValue("NodeID") }
+
 		body.PostedAs.OrgPath = c.FormValue("postedAs.org_path")
 		body.PostedAs.PositionKey = c.FormValue("postedAs.position_key")
 

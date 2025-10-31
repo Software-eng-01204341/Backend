@@ -9,6 +9,7 @@ import (
 type Event struct {
 	ID               bson.ObjectID `bson:"_id,omitempty" json:"id"`
 	NodeID           bson.ObjectID `bson:"node_id" json:"node_id"`
+	UserID           bson.ObjectID `bson:"user_id" json:"user_id"`
 	Topic            string        `bson:"topic" json:"topic"`
 	Description      string        `bson:"description" json:"description"`
 	PictureURL       *string       `bson:"picture_url,omitempty" json:"picture_url,omitempty"`
