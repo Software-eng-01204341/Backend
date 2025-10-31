@@ -7,18 +7,20 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
-	"strings"	
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"main-webbase/database"
 	"main-webbase/dto"
 	"main-webbase/internal/middleware"
 	"main-webbase/internal/models"
-	"main-webbase/internal/services"
 	"main-webbase/internal/repository"
+	"main-webbase/internal/services"
 )
 
 // CreateEventHandler godoc
@@ -177,25 +179,49 @@ func GetAllVisibleEventHandler() fiber.Handler {
 		log.Printf("[DEBUG] orgSets=%+v", orgSets)
 
 		// ---------- parse filters ----------
-        q := c.Query("q")
+		q := c.Query("q")
 		roles := splitCSVFilter(c.Query("role"))
 
 		// events, err := services.GetVisibleEvents(viewerID, ctx, orgSets)
 		events, err := services.GetVisibleEventsFiltered(
-            viewerID,
-            ctx,
-            orgSets,
-            services.VisibleEventQuery{
-                Roles:    roles,
-                Q:        q,
-            },
-        )
+			viewerID,
+			ctx,
+			orgSets,
+			services.VisibleEventQuery{
+				Roles: roles,
+				Q:     q,
+			},
+		)
 
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
 
 		return c.JSON(events)
+	}
+}
+
+// GetAllPendingEventHandler godoc
+// @Summary      List pending events
+// @Description  Return every event that is still pending approval, sorted by newest first.
+// @Tags         events
+// @Produce      json
+// @Success      200  {array}  dto.EventDetail
+// @Failure      500  {object} map[string]string "Internal server error"
+// @Router       /event/pending [get]
+func GetAllPendingEventHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		col := database.DB.Collection("events") // ใช้ global DB ตามที่คุณใช้อยู่
+
+		items, err := services.QueryPendingEvents(
+			c.Context(),
+			col,
+		)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(items)
 	}
 }
 
@@ -309,33 +335,33 @@ func DeleteEventHandler() fiber.Handler {
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to get participants"})
 		}
-		
-        ref := models.Ref{
-            ID: eventID,
-            Entity: "event",
-        }
+
+		ref := models.Ref{
+			ID:     eventID,
+			Entity: "event",
+		}
 		colEvent := database.DB.Collection("events")
 		colNoti := database.DB.Collection("notification")
-        var result struct {
-            Title string `bson:"topic"`
-        }
-        err = colEvent.FindOne(c.Context(), bson.M{"_id": eventID}).Decode(&result)
-        if err != nil {
-            return fiber.NewError(fiber.StatusInternalServerError, "failed to fetch event title: " + err.Error())
-        }
+		var result struct {
+			Title string `bson:"topic"`
+		}
+		err = colEvent.FindOne(c.Context(), bson.M{"_id": eventID}).Decode(&result)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to fetch event title: "+err.Error())
+		}
 
-        notiParam := models.NotiParams{
-            EventTitle: result.Title,
-            EventID: eventID,
-        }
-        if err := services.NotifyMany(c.Context(), 
-            colNoti, 
-            userIds, 
-            services.NotiEventDeleted, 
-            ref,
-            notiParam); err != nil { 
-            return err
-            }
+		notiParam := models.NotiParams{
+			EventTitle: result.Title,
+			EventID:    eventID,
+		}
+		if err := services.NotifyMany(c.Context(),
+			colNoti,
+			userIds,
+			services.NotiEventDeleted,
+			ref,
+			notiParam); err != nil {
+			return err
+		}
 
 		return c.JSON(fiber.Map{"message": "Event deleted (soft)"})
 	}
@@ -461,34 +487,145 @@ func UpdateEventHandler() fiber.Handler {
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to get participants"})
 		}
-		
-        ref := models.Ref{
-            ID: eventID,
-            Entity: "event",
-        }
+
+		ref := models.Ref{
+			ID:     eventID,
+			Entity: "event",
+		}
 		colEvent := database.DB.Collection("events")
 		colNoti := database.DB.Collection("notification")
-        var doc struct {
-            Title string `bson:"topic"`
-        }
-        err = colEvent.FindOne(c.Context(), bson.M{"_id": eventID}).Decode(&result)
-        if err != nil {
-            return fiber.NewError(fiber.StatusInternalServerError, "failed to fetch event title: " + err.Error())
-        }
+		var doc struct {
+			Title string `bson:"topic"`
+		}
+		err = colEvent.FindOne(c.Context(), bson.M{"_id": eventID}).Decode(&result)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to fetch event title: "+err.Error())
+		}
 
-        notiParam := models.NotiParams{
-            EventTitle: doc.Title,
-            EventID: eventID,
-        }
-        if err := services.NotifyMany(c.Context(), 
-            colNoti, 
-            userIds, 
-            services.NotiEventUpdated, 
-            ref,
-            notiParam); err != nil { 
-            return fiber.NewError(fiber.StatusInternalServerError, "failed to send notification")
-            }
+		notiParam := models.NotiParams{
+			EventTitle: doc.Title,
+			EventID:    eventID,
+		}
+		if err := services.NotifyMany(c.Context(),
+			colNoti,
+			userIds,
+			services.NotiEventUpdated,
+			ref,
+			notiParam); err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to send notification")
+		}
 
 		return c.Status(fiber.StatusOK).JSON(result)
+	}
+}
+
+// ให้ error format เหมือนเดิมทุกที่
+func writeErr(c *fiber.Ctx, code int, msg string) error {
+	return c.Status(code).JSON(dto.ErrorResponse{Error: msg})
+}
+
+// PatchAcceptEventHandler godoc
+// @Summary      Approve a pending event
+// @Description  Mark a pending event as active.
+// @Tags         events
+// @Param        event_id  path  string  true  "Event ID"
+// @Success      200  {object} dto.EventDetail
+// @Failure      400  {object} dto.ErrorResponse "Invalid Event ID"
+// @Failure      404  {object} dto.ErrorResponse "pending event not found or already processed"
+// @Failure      500  {object} dto.ErrorResponse "Internal server error"
+// @Router       /event/accept/{event_id} [patch]
+func PatchAcceptEventHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		col := database.DB.Collection("events")
+
+		idHex := c.Params("event_id")
+		oid, err := bson.ObjectIDFromHex(idHex)
+		if err != nil {
+			return writeErr(c, fiber.StatusBadRequest, "Invalid Event ID")
+		}
+
+		ctx, cancel := context.WithTimeout(c.Context(), 8*time.Second)
+		defer cancel()
+
+		now := time.Now().UTC()
+		opt := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+		res := col.FindOneAndUpdate(
+			ctx,
+			bson.M{"_id": oid, "status": "pending"},
+			bson.M{"$set": bson.M{
+				"status":     "active",
+				"updated_at": now,
+			}},
+			opt,
+		)
+
+		if err := res.Err(); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return writeErr(c, fiber.StatusNotFound, "pending event not found or already processed")
+			}
+			return writeErr(c, fiber.StatusInternalServerError, err.Error())
+		}
+
+		var ev dto.EventDetail
+		if err := res.Decode(&ev); err != nil {
+			return writeErr(c, fiber.StatusInternalServerError, err.Error())
+		}
+
+		return c.Status(fiber.StatusOK).JSON(ev)
+	}
+}
+
+
+// PatchRejectEventHandler godoc
+// @Summary      Reject a pending event
+// @Description  Mark a pending event as rejected.
+// @Tags         events
+// @Param        event_id  path  string  true  "Event ID"
+// @Success      200  {object} dto.EventDetail
+// @Failure      400  {object} dto.ErrorResponse "Invalid Event ID"
+// @Failure      404  {object} dto.ErrorResponse "pending event not found or already processed"
+// @Failure      500  {object} dto.ErrorResponse "Internal server error"
+// @Router       /event/reject/{event_id} [patch]
+func PatchRejectEventHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		col := database.DB.Collection("events")
+
+		idHex := c.Params("event_id")
+		oid, err := bson.ObjectIDFromHex(idHex)
+		if err != nil {
+			return writeErr(c, fiber.StatusBadRequest, "Invalid Event ID")
+		}
+
+		ctx, cancel := context.WithTimeout(c.Context(), 8*time.Second)
+		defer cancel()
+
+		update := bson.M{
+			"status":     "rejected",
+			"updated_at": time.Now().UTC(),
+		}
+
+		opt := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+		res := col.FindOneAndUpdate(
+			ctx,
+			bson.M{"_id": oid, "status": "pending"},
+			bson.M{"$set": update},
+			opt,
+		)
+
+		if err := res.Err(); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return writeErr(c, fiber.StatusNotFound, "pending event not found or already processed")
+			}
+			return writeErr(c, fiber.StatusInternalServerError, err.Error())
+		}
+
+		var ev dto.EventDetail
+		if err := res.Decode(&ev); err != nil {
+			return writeErr(c, fiber.StatusInternalServerError, err.Error())
+		}
+
+		return c.Status(fiber.StatusOK).JSON(ev)
 	}
 }

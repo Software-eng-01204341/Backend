@@ -541,7 +541,7 @@ definitions:
       posted_as:
         $ref: '#/definitions/models.PostedAs'
       status:
-        description: active, draft, inactive
+        description: active, pending, draft, inactive
         type: string
       topic:
         type: string
@@ -746,6 +746,10 @@ definitions:
   models.RegisterRequest:
     properties:
       advisor_id:
+        type: string
+      allergy:
+        type: string
+      disease:
         type: string
       email:
         type: string
@@ -1364,6 +1368,35 @@ paths:
       summary: Create or replace form questions
       tags:
       - forms
+  /event/accept/{event_id}:
+    patch:
+      description: Mark a pending event as active.
+      parameters:
+      - description: Event ID
+        in: path
+        name: event_id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.EventDetail'
+        "400":
+          description: Invalid Event ID
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: pending event not found or already processed
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Approve a pending event
+      tags:
+      - events
   /event/participant/mystatus/{eventId}:
     get:
       consumes:
@@ -1473,6 +1506,57 @@ paths:
               type: string
             type: object
       summary: Participate in an event (no form required)
+      tags:
+      - events
+  /event/pending:
+    get:
+      description: Return every event that is still pending approval, sorted by newest
+        first.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.EventDetail'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List pending events
+      tags:
+      - events
+  /event/reject/{event_id}:
+    patch:
+      description: Mark a pending event as rejected.
+      parameters:
+      - description: Event ID
+        in: path
+        name: event_id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.EventDetail'
+        "400":
+          description: Invalid Event ID
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: pending event not found or already processed
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Reject a pending event
       tags:
       - events
   /likes:

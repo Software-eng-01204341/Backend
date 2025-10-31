@@ -17,7 +17,7 @@ type Event struct {
 	PostedAs     *PostedAs   `json:"posted_as,omitempty"`
 	Visibility   *Visibility `json:"visibility,omitempty"`
 	OrgOfContent string      `bson:"org_of_content,omitempty" json:"org_of_content,omitempty"`
-	Status       string      `bson:"status,omitempty" json:"status,omitempty"` // active, draft, inactive
+	Status       string      `bson:"status,omitempty" json:"status,omitempty"` // active, pending, draft, inactive
 	Have_form    bool        `bson:"have_form" json:"have_form"`
 
 	CreatedAt *time.Time `bson:"created_at,omitempty" json:"created_at,omitempty"`

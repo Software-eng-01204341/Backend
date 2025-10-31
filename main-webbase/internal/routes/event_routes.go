@@ -18,10 +18,14 @@ func SetupRoutesEvent(app *fiber.App, client *mongo.Client) {
     event.Get("/managed", controllers.ListManagedEventsHandler())
 
     // Dynamic event routes
+
+    event.Get("/pending", controllers.GetAllPendingEventHandler())
     event.Get("/:event_id", controllers.GetEventDetailHandler())
     event.Patch("/:event_id", controllers.UpdateEventHandler())
     event.Delete("/:event_id", controllers.DeleteEventHandler())
     event.Post("/participate/:event_id", controllers.ParticipateEventWithNoFormHandler()) 
+    event.Patch("/accept/:event_id", controllers.PatchAcceptEventHandler())
+    event.Patch("/reject/:event_id", controllers.PatchRejectEventHandler())
 
     // Event Q&A
     event.Post("/:eventId/qa", controllers.CreateEventQAHandler(client))

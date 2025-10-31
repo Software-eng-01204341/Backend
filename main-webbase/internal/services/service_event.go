@@ -3,11 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"time"
 	"sort"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"main-webbase/dto"
 	"main-webbase/internal/models"
@@ -21,6 +22,10 @@ func CreateEventWithSchedules(body dto.EventRequestDTO, ctx context.Context) (dt
 	nodeID, err := bson.ObjectIDFromHex(body.NodeID)
 	if err != nil {
 		return dto.EventCreateResult{}, fmt.Errorf("invalid NodeID: %w", err)
+	}
+
+	if body.Status != "draft" {
+		body.Status = "pending"
 	}
 
 	event := models.Event{
@@ -111,12 +116,12 @@ func CreateEventWithSchedules(body dto.EventRequestDTO, ctx context.Context) (dt
 
 // Use in GetAllVisibleEventHandler
 type VisibleEventQuery struct {
-    Roles    []string
-    Q        string
+	Roles []string
+	Q     string
 }
 
-func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userOrgSets []string, q VisibleEventQuery,) ([]dto.EventFeed, error) {
-    
+func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userOrgSets []string, q VisibleEventQuery) ([]dto.EventFeed, error) {
+
 	var events []models.Event
 	var err error
 	if q.Q != "" || len(q.Roles) > 0 {
@@ -131,8 +136,8 @@ func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userO
 		return nil, err
 	}
 
-    // Filter visible events
-    var visibleEvents []models.Event
+	// Filter visible events
+	var visibleEvents []models.Event
 	var eventIDs []bson.ObjectID
 	for _, ev := range events {
 		if CheckVisibleEvent(ctx, &ev, userOrgSets, viewerID) {
@@ -144,15 +149,15 @@ func GetVisibleEventsFiltered(viewerID bson.ObjectID, ctx context.Context, userO
 		return []dto.EventFeed{}, nil
 	}
 
-    // ดึง Fetch schedules
-    scheds, err := repo.GetSchedulesByEvent(ctx, eventIDs)
-    if err != nil {
-        return nil, err
-    }
-    schedMap := make(map[bson.ObjectID][]models.EventSchedule)
-    for _, s := range scheds {
-        schedMap[s.EventID] = append(schedMap[s.EventID], s)
-    }
+	// ดึง Fetch schedules
+	scheds, err := repo.GetSchedulesByEvent(ctx, eventIDs)
+	if err != nil {
+		return nil, err
+	}
+	schedMap := make(map[bson.ObjectID][]models.EventSchedule)
+	for _, s := range scheds {
+		schedMap[s.EventID] = append(schedMap[s.EventID], s)
+	}
 
 	// Update expired events (inactive)
 	now := time.Now().UTC()
@@ -298,11 +303,11 @@ func CheckVisibleEvent(ctx context.Context, event *models.Event, userOrgs []stri
 	}
 
 	if event.Status == "draft" {
-		subtreeSet := map[string]struct{}{} 
-		for _, s := range userOrgs { 
-			subtreeSet[s] = struct{}{} 
-		} 
-		if _, ok := subtreeSet[event.OrgOfContent]; ok { 
+		subtreeSet := map[string]struct{}{}
+		for _, s := range userOrgs {
+			subtreeSet[s] = struct{}{}
+		}
+		if _, ok := subtreeSet[event.OrgOfContent]; ok {
 			userStatus, err := GetParticipantStatus(ctx, userID.Hex(), event.ID.Hex())
 			if err != nil {
 				return false
@@ -349,7 +354,7 @@ func GetEventDetail(eventID string, ctx context.Context) (dto.EventDetail, error
 		Description:          event.Description,
 		PictureURL:           event.PictureURL,
 		MaxParticipation:     event.MaxParticipation,
-		CurrentParticipation: participantCount, 
+		CurrentParticipation: participantCount,
 		PostedAs:             event.PostedAs,
 		Visibility:           event.Visibility,
 		Status:               event.Status,
@@ -360,7 +365,6 @@ func GetEventDetail(eventID string, ctx context.Context) (dto.EventDetail, error
 
 	return eventDetail, nil
 }
-
 
 func ParticipateEvent(eventID string, uid string, ctx context.Context) error {
 	now := time.Now().UTC()
@@ -478,4 +482,68 @@ func UpdateEventWithSchedules(eventID bson.ObjectID, body dto.EventRequestDTO, c
 	}
 
 	return body, err
+}
+
+// QueryPendingEvents ดึงรายการอีเวนต์สถานะ "pending" ทั้งหมด (เรียง _id จากใหม่ไปเก่า)
+func QueryPendingEvents(
+	ctx context.Context,
+	col *mongo.Collection,
+) ([]dto.EventDetail, error) {
+	filter := bson.M{"status": "pending"}
+
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "_id", Value: -1}})
+
+	qctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cur, err := col.Find(qctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(qctx)
+
+	items := make([]dto.EventDetail, 0)
+	type pendingEventDoc struct {
+		ID                   bson.ObjectID          `bson:"_id"`
+		OrgPath              string                 `bson:"org_of_content"`
+		Topic                string                 `bson:"topic"`
+		Description          string                 `bson:"description"`
+		PictureURL           *string                `bson:"picture_url"`
+		MaxParticipation     int                    `bson:"max_participation"`
+		CurrentParticipation int                    `bson:"current_participation"`
+		PostedAs             *models.PostedAs       `bson:"posted_as"`
+		Visibility           *models.Visibility     `bson:"visibility"`
+		Status               string                 `bson:"status"`
+		HaveForm             bool                   `bson:"have_form"`
+		Schedules            []models.EventSchedule `bson:"schedules"`
+		UserParticipants     []dto.UserParticipant  `bson:"user_participants"`
+	}
+
+	for cur.Next(qctx) {
+		var doc pendingEventDoc
+		if err := cur.Decode(&doc); err != nil {
+			return nil, err
+		}
+		items = append(items, dto.EventDetail{
+			EventID:              doc.ID.Hex(),
+			OrgPath:              doc.OrgPath,
+			Topic:                doc.Topic,
+			Description:          doc.Description,
+			PictureURL:           doc.PictureURL,
+			MaxParticipation:     doc.MaxParticipation,
+			CurrentParticipation: doc.CurrentParticipation,
+			PostedAs:             doc.PostedAs,
+			Visibility:           doc.Visibility,
+			Status:               doc.Status,
+			Have_form:            doc.HaveForm,
+			Schedules:            doc.Schedules,
+			UserParticipants:     doc.UserParticipants,
+		})
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }

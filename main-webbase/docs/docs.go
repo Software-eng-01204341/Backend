@@ -327,6 +327,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/event/accept/{event_id}": {
+            "patch": {
+                "description": "Mark a pending event as active.",
+                "tags": [
+                    "events"
+                ],
+                "summary": "Approve a pending event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "event_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.EventDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Event ID",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "pending event not found or already processed",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/event/participant/mystatus/{eventId}": {
             "get": {
                 "description": "Returns the status of the authenticated user for a specific event.",
@@ -489,6 +533,82 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/event/pending": {
+            "get": {
+                "description": "Return every event that is still pending approval, sorted by newest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "events"
+                ],
+                "summary": "List pending events",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.EventDetail"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/event/reject/{event_id}": {
+            "patch": {
+                "description": "Mark a pending event as rejected.",
+                "tags": [
+                    "events"
+                ],
+                "summary": "Reject a pending event",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "event_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.EventDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Event ID",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "pending event not found or already processed",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
                         }
                     }
                 }
@@ -3262,7 +3382,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.PostedAs"
                 },
                 "status": {
-                    "description": "active, draft, inactive",
+                    "description": "active, pending, draft, inactive",
                     "type": "string"
                 },
                 "topic": {
@@ -3571,6 +3691,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "advisor_id": {
+                    "type": "string"
+                },
+                "allergy": {
+                    "type": "string"
+                },
+                "disease": {
                     "type": "string"
                 },
                 "email": {
