@@ -211,7 +211,23 @@ func DeletePostHandler(client *mongo.Client) fiber.Handler {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		db := client.Database("unicom")
+        db := client.Database("unicom")
+
+        // Optional hard delete for admin/root via ?hard=true
+        hard := strings.EqualFold(strings.TrimSpace(c.Query("hard")), "true")
+        if hard {
+            if !isRoot {
+                return fiber.NewError(fiber.StatusForbidden, "forbidden")
+            }
+            ok, err := repo.DeletePostCascade(db, postID, ctx)
+            if err != nil {
+                return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+            }
+            if !ok {
+                return fiber.NewError(fiber.StatusNotFound, "post not found")
+            }
+            return c.SendStatus(fiber.StatusNoContent)
+        }
 
 		ok, err := repo.DeletePost(db, postID, ctx, uid, isRoot)
 		if err != nil {

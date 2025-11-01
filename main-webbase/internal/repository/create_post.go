@@ -343,3 +343,53 @@ func UpdatePostCore(
 	}
 	return &out, nil
 }
+
+// DeletePostCascade performs a hard delete of a post and related records that affect frontend visibility:
+// - delete likes on the post
+// - delete likes on comments under the post
+// - delete comments under the post
+// - finally delete the post document itself
+// Note: does not touch hashtags/post_categories/post_role_visibility per current policy.
+func DeletePostCascade(db *mongo.Database, postID bson.ObjectID, ctx context.Context) (bool, error) {
+    postsCol := db.Collection("posts")
+    likesCol := db.Collection("like")
+    commentsCol := db.Collection("comments")
+
+    // ensure post exists
+    var exists struct{ ID bson.ObjectID `bson:"_id"` }
+    if err := postsCol.FindOne(ctx, bson.M{"_id": postID}, options.FindOne().SetProjection(bson.M{"_id": 1})).Decode(&exists); err != nil {
+        if err == mongo.ErrNoDocuments {
+            return false, nil
+        }
+        return false, err
+    }
+
+    // 1) delete likes on the post
+    _, _ = likesCol.DeleteMany(ctx, bson.M{"post_id": postID})
+
+    // 2) collect comment ids under this post and delete likes on those comments
+    cur, err := commentsCol.Find(ctx, bson.M{"post_id": postID}, options.Find().SetProjection(bson.M{"_id": 1}))
+    if err == nil {
+        var cids []bson.ObjectID
+        for cur.Next(ctx) {
+            var row struct{ ID bson.ObjectID `bson:"_id"` }
+            if err := cur.Decode(&row); err == nil {
+                cids = append(cids, row.ID)
+            }
+        }
+        _ = cur.Close(ctx)
+        if len(cids) > 0 {
+            _, _ = likesCol.DeleteMany(ctx, bson.M{"comment_id": bson.M{"$in": cids}})
+        }
+    }
+
+    // 3) delete comments under the post
+    _, _ = commentsCol.DeleteMany(ctx, bson.M{"post_id": postID})
+
+    // 4) delete the post itself
+    res, err := postsCol.DeleteOne(ctx, bson.M{"_id": postID})
+    if err != nil {
+        return false, err
+    }
+    return res.DeletedCount > 0, nil
+}

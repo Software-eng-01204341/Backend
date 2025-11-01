@@ -403,31 +403,25 @@ func GetUserBy(field string) fiber.Handler {
 // @Failure 500 {object} map[string]interface{}
 // @Router /users/{id} [delete]
 func DeleteUser() fiber.Handler {
-    return func (c *fiber.Ctx) error {
-        // Use the same collection name as auth ("users")
-        collection := database.DB.Collection("users")
-		id := c.Params("id")
+    return func(c *fiber.Ctx) error {
+        // Only admin/root can delete users
+        if !isRootByPath(viewerFrom(c)) {
+            return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "forbidden"})
+        }
 
-		objID, err := bson.ObjectIDFromHex(id)
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid ID"})
-		}
+        id := strings.TrimSpace(c.Params("id"))
+        if _, err := bson.ObjectIDFromHex(id); err != nil {
+            return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid ID"})
+        }
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+        // Delegate cascade to service
+        if err := services.DeleteUserCascade(c.Context(), id); err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+        }
 
-		res, err := collection.DeleteOne(ctx, bson.M{"_id": objID})
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-		}
-
-		if res.DeletedCount == 0 {
-			return c.Status(404).JSON(fiber.Map{"error": "User not found"})
-		}
-
-		return c.JSON(fiber.Map{
-			"success": true,
-			"message": "User deleted successfully",
-		})
-	}
+        return c.JSON(fiber.Map{
+            "success": true,
+            "message": "User deleted successfully",
+        })
+    }
 }
