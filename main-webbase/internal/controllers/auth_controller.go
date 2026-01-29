@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"main-webbase/database"
 	"main-webbase/internal/models"
 	"net/smtp"
@@ -89,16 +88,16 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	// Generate OTP
-	otp, err := GenerateOTP(6)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate OTP"})
-	}
+	// otp, err := GenerateOTP(6)
+	// if err != nil {
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to generate OTP"})
+	// }
 
 	// Send OTP email
-	if err := SendOTPEmail(registerRequest.Email, otp); err != nil {
-		log.Println("Failed to send OTP email:", err)
-		// Optional: continue registration even if email fails
-	}
+	// if err := SendOTPEmail(registerRequest.Email, otp); err != nil {
+	// 	log.Println("Failed to send OTP email:", err)
+	// 	// Optional: continue registration even if email fails
+	// }
 
 	// Add to DB
 	user := models.User{
@@ -114,11 +113,11 @@ func Register(c *fiber.Ctx) error {
 		PasswordHash: string(hashedPassword),
 		Disease:      registerRequest.Disease,
 		Allergy:      registerRequest.Allergy,
-		Telephone:   registerRequest.Telephone,
-		OTP:          otp,                             // store OTP in DB
-		OTPExpiresAt: time.Now().Add(5 * time.Minute), // expires in 5 minutes
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		Telephone:    registerRequest.Telephone,
+		// OTP:          otp,                             // store OTP in DB
+		// OTPExpiresAt: time.Now().Add(5 * time.Minute), // expires in 5 minutes
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	_, err = collection.InsertOne(ctx, user)

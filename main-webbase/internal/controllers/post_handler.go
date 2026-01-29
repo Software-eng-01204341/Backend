@@ -3,9 +3,11 @@ package controllers
 import (
 	"context"
 	"errors"
+	"log"
 	"path/filepath"
 
 	"fmt"
+	"main-webbase/database"
 	"main-webbase/dto"
 	"main-webbase/internal/accessctx"
 	mid "main-webbase/internal/middleware"
@@ -109,6 +111,19 @@ func CreatePostHandler(client *mongo.Client) fiber.Handler {
 				JSON(dto.ErrorResponse{Error: "postText is required"})
 		}
 
+		// Big ADD na for logging
+		log.Println("---- RAW INPUT ----")
+		log.Println("Form postAs.org_path:", c.FormValue("postAs.org_path"))
+		log.Println("Form postAs.position_key:", c.FormValue("postAs.position_key"))
+
+		log.Println("Body postAs.org_path:", body.PostAs.OrgPath)
+		log.Println("Body postAs.position_key:", body.PostAs.PositionKey)
+
+		log.Println("PostText:", body.PostText)
+		log.Println("Visibility:", body.Visibility)
+		log.Println("OrgOfContent:", body.OrgOfContent)
+		//
+
 		if !canPostAs(viewerFrom(c), body.PostAs.OrgPath, body.PostAs.PositionKey) {
 			return c.Status(fiber.StatusForbidden).
 				JSON(dto.ErrorResponse{Error: "forbidden: you cannot post as this role"})
@@ -152,8 +167,6 @@ func CreatePostHandler(client *mongo.Client) fiber.Handler {
 // @Failure      500  {object}  dto.ErrorResponse
 // @Router       /posts/{post_id} [get]
 func GetIndividualPostHandler(client *mongo.Client) fiber.Handler {
-	const dbName = "unicom"
-
 	return func(c *fiber.Ctx) error {
 
 		postIDHex := c.Params("post_id")
@@ -171,9 +184,7 @@ func GetIndividualPostHandler(client *mongo.Client) fiber.Handler {
 		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 		defer cancel()
 
-		db := client.Database(dbName)
-
-		resp, err := services.GetPostDetail(ctx, db, userID, postID)
+		resp, err := services.GetPostDetail(ctx, database.DB, userID, postID)
 		if err != nil {
 			// ถ้าถูก wrap ด้วย %w จาก service จะเช็ค ErrNoDocuments ได้
 			if errors.Is(err, mongo.ErrNoDocuments) {

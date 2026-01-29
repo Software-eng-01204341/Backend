@@ -271,13 +271,13 @@ func CheckVisibleEvent(ctx context.Context, event *models.Event, userOrgs []stri
 	}
 
 	if event.Status == "pending" {
-		// Check if user has "/" in their org paths
-		for _, s := range userOrgs {
-			if s == "/" {
-				return true
-			}
-		}
-		return false
+		// // Check if user has "/" in their org paths
+		// for _, s := range userOrgs {
+		// 	if s == "/" {
+		// 		return true
+		// 	}
+		// }
+		return true
 	}
 
 	if event.Status == "active" {

@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"main-webbase/database"
 	"main-webbase/internal/models"
 )
 
@@ -32,7 +33,7 @@ type mongoFeedRepo struct {
 
 func NewMongoFeedRepo(client *mongo.Client) FeedRepository {
 	return &mongoFeedRepo{
-		col: client.Database("unicom").Collection("posts"),
+		col: database.DB.Collection("posts"),
 	}
 }
 
@@ -76,7 +77,7 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 			"as":           "pos",
 		}}},
 		{{Key: "$unwind", Value: bson.M{"path": "$pos", "preserveNullAndEmptyArrays": true}}},
-		
+
 		// ===== Categories =====
 		{{Key: "$lookup", Value: bson.M{
 			"from": "post_categories",
@@ -115,7 +116,6 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 			},
 			"as": "likedByMe", // <— เปลี่ยนชื่อให้สื่อว่าเป็น array ชั่วคราว
 		}}},
-			
 	}
 
 	// ===== Text search =====
@@ -123,14 +123,14 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 		safe := regexp.QuoteMeta(opts.TextSearch)
 		pipe = append(pipe, bson.D{{Key: "$match", Value: bson.M{"$or": []bson.M{
 			{ // <-- ตรงนี้คือ fallback: ถ้ามี censored_text ใช้อันนั้น ไม่งั้นใช้ post_text
-                "$expr": bson.M{
-                    "$regexMatch": bson.M{
-                        "input":   bson.M{"$ifNull": bson.A{"$censored_text", "$post_text"}},
-                        "regex":   safe,
-                        "options": "i",
-                    },
-                },
-            },
+				"$expr": bson.M{
+					"$regexMatch": bson.M{
+						"input":   bson.M{"$ifNull": bson.A{"$censored_text", "$post_text"}},
+						"regex":   safe,
+						"options": "i",
+					},
+				},
+			},
 			//{"u.username": bson.M{"$regex": opts.TextSearch, "$options": "i"}},
 			{"u.firstname": bson.M{"$regex": opts.TextSearch, "$options": "i"}},
 			{"u.lastname": bson.M{"$regex": opts.TextSearch, "$options": "i"}},
@@ -170,7 +170,9 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 		orCats := make([]bson.M, 0, len(opts.Categories)*2)
 		for _, c := range opts.Categories {
 			c = strings.TrimSpace(c)
-			if c == "" { continue }
+			if c == "" {
+				continue
+			}
 
 			if oid, err := bson.ObjectIDFromHex(c); err == nil {
 				// ผู้ใช้ส่งเป็น id → เทียบ equality กับ ObjectId
@@ -254,9 +256,9 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 				" ",
 				bson.M{"$ifNull": bson.A{"$u.lastname", ""}},
 			}},
-			"node_id" : 1,
-			"position_id" : 1,
-			"hashtag":      1,
+			"node_id":     1,
+			"position_id": 1,
+			"hashtag":     1,
 			"tag":         1,
 			"category": bson.M{ // []string ของชื่อหมวดหมู่
 				"$map": bson.M{
@@ -267,16 +269,16 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 			},
 			"post_text": bson.M{"$ifNull": bson.A{"$censored_text", "$post_text"}},
 			// "censored_text": 0,
-			"media":        1,
-			"like_count":     1,
+			"media":      1,
+			"like_count": 1,
 			// "likedBy":   bson.A{},
 			"comment_count": 1,
-			"created_at": 1,
-			"updated_at": 1,
-			"status": bson.M{"$ifNull": bson.A{"$status", "active"}},
+			"created_at":    1,
+			"updated_at":    1,
+			"status":        bson.M{"$ifNull": bson.A{"$status", "active"}},
 			"visibility": bson.M{
 				"$cond": bson.A{
-					"$hasVisibility",  // ถ้ามีบันทึก visibility แปลว่า "private"
+					"$hasVisibility", // ถ้ามีบันทึก visibility แปลว่า "private"
 					"private",
 					"public",
 				},
@@ -299,8 +301,12 @@ func buildCommonPipeline(baseMatch bson.D, lim int64, opts models.QueryOptions, 
 // ================================
 func (r *mongoFeedRepo) ListPopular(ctx context.Context, opts models.QueryOptions) ([]models.Post, *bson.ObjectID, error) {
 	lim := opts.Limit
-	if lim <= 0 { lim = 20 }
-	if lim > 20 { lim = 20 }
+	if lim <= 0 {
+		lim = 20
+	}
+	if lim > 20 {
+		lim = 20
+	}
 
 	var untilLike *int
 	var untilTime *time.Time
@@ -339,12 +345,13 @@ func (r *mongoFeedRepo) ListPopular(ctx context.Context, opts models.QueryOption
 	if len(opts.AuthorIDs) > 0 {
 		baseMatch = append(baseMatch, bson.E{Key: "user_id", Value: bson.M{"$in": opts.AuthorIDs}})
 	}
-	
 
 	pipe := buildCommonPipeline(baseMatch, lim, opts, true)
 
 	cur, err := r.col.Aggregate(ctx, pipe, options.Aggregate())
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 	defer cur.Close(ctx)
 
 	var items []models.Post
@@ -369,7 +376,9 @@ func (r *mongoFeedRepo) List(ctx context.Context, opts models.QueryOptions) ([]m
 	var sinceTime *time.Time
 
 	if !opts.UntilID.IsZero() {
-		var tmp struct{ CreatedAt time.Time `bson:"created_at"` }
+		var tmp struct {
+			CreatedAt time.Time `bson:"created_at"`
+		}
 		_ = r.col.FindOne(ctx, bson.M{"_id": opts.UntilID}, options.FindOne().SetProjection(bson.M{"created_at": 1, "_id": 0})).Decode(&tmp)
 		if !tmp.CreatedAt.IsZero() {
 			t := tmp.CreatedAt.UTC()
@@ -377,7 +386,9 @@ func (r *mongoFeedRepo) List(ctx context.Context, opts models.QueryOptions) ([]m
 		}
 	}
 	if !opts.SinceID.IsZero() {
-		var tmp struct{ CreatedAt time.Time `bson:"created_at"` }
+		var tmp struct {
+			CreatedAt time.Time `bson:"created_at"`
+		}
 		_ = r.col.FindOne(ctx, bson.M{"_id": opts.SinceID}, options.FindOne().SetProjection(bson.M{"created_at": 1, "_id": 0})).Decode(&tmp)
 		if !tmp.CreatedAt.IsZero() {
 			t := tmp.CreatedAt.UTC()
@@ -413,13 +424,19 @@ func (r *mongoFeedRepo) List(ctx context.Context, opts models.QueryOptions) ([]m
 	}
 
 	lim := opts.Limit
-	if lim <= 0 { lim = 20 }
-	if lim > 20 { lim = 20 }
+	if lim <= 0 {
+		lim = 20
+	}
+	if lim > 20 {
+		lim = 20
+	}
 
 	pipe := buildCommonPipeline(baseMatch, lim, opts, false)
 
 	cur, err := r.col.Aggregate(ctx, pipe, options.Aggregate())
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 	defer cur.Close(ctx)
 
 	var items []models.Post

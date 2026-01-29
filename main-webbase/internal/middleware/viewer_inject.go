@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"main-webbase/database"
 	"main-webbase/internal/accessctx"
 
 	"github.com/gofiber/fiber/v2"
@@ -26,7 +27,7 @@ func InjectViewer(db *mongo.Database) fiber.Handler {
 		ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 		defer cancel()
 
-		v, err := accessctx.BuildViewerAccess(ctx, db, uid)
+		v, err := accessctx.BuildViewerAccess(ctx, database.DB, uid)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				return fiber.ErrUnauthorized

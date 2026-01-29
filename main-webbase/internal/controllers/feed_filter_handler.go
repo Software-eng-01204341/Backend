@@ -2,6 +2,7 @@
 package controllers
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -66,6 +67,17 @@ func FeedHandler(client *mongo.Client) fiber.Handler {
 			next  *bson.ObjectID
 			err   error
 		)
+
+		// ADD BIG DEBUG
+		fmt.Printf(
+			"[FEED] limit=%d sort=%s category=%v role=%v cursor=%s\n",
+			limit,
+			sortBy,
+			opts.Categories,
+			opts.Roles,
+			c.Query("cursor"),
+		)
+		//
 
 		// ✅ เรียก popular หรือ time ตามพารามิเตอร์
 		if sortBy == "popular" {

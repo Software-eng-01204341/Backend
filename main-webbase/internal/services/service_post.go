@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"main-webbase/database"
 	"main-webbase/dto"
 	"main-webbase/internal/models"
 	repo "main-webbase/internal/repository"
 	u "main-webbase/internal/utils"
+	"strings"
 	"time"
-	"strings" 
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -21,14 +22,13 @@ var ErrPositionNotFound = errors.New("position not found")
 var ErrUserIDInvalid = errors.New("userID invalid")
 
 func CreatePostWithMeta(client *mongo.Client, UserID string, body dto.CreatePostDTO, ctx context.Context) (dto.PostResponse, error) {
-	db := client.Database("unicom")
 	now := time.Now().UTC()
 
 	var resp dto.PostResponse
-	postsCol := db.Collection("posts")
+	postsCol := database.DB.Collection("posts")
 
 	// 0) เตรียม RolePathID / PositionID จาก DTO (lookup ด้วย org_path, position_key)
-	rolePathID, err := repo.ResolveOrgNodeIDByPath(db, body.PostAs.OrgPath, ctx)
+	rolePathID, err := repo.ResolveOrgNodeIDByPath(database.DB, body.PostAs.OrgPath, ctx)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return resp, ErrOrgNodeNotFound
@@ -36,7 +36,7 @@ func CreatePostWithMeta(client *mongo.Client, UserID string, body dto.CreatePost
 		return resp, err
 	}
 
-	positionID, err := repo.ResolvePositionIDByKey(db, body.PostAs.PositionKey, ctx)
+	positionID, err := repo.ResolvePositionIDByKey(database.DB, body.PostAs.PositionKey, ctx)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return resp, ErrPositionNotFound
@@ -68,12 +68,12 @@ func CreatePostWithMeta(client *mongo.Client, UserID string, body dto.CreatePost
 
 	// --- Create Post object ---
 	post := models.Post{
-		UserID:       UserIDs,
-		RolePathID:   rolePathID,
-		PositionID:   positionID,
-		Hashtag:      tagsSlice,
-		Tags:         tags,
-		PostAs: models.PostAs{   // ✅ proper type conversion
+		UserID:     UserIDs,
+		RolePathID: rolePathID,
+		PositionID: positionID,
+		Hashtag:    tagsSlice,
+		Tags:       tags,
+		PostAs: models.PostAs{ // ✅ proper type conversion
 			OrgPath:     body.PostAs.OrgPath,
 			PositionKey: body.PostAs.PositionKey,
 		},
@@ -97,19 +97,19 @@ func CreatePostWithMeta(client *mongo.Client, UserID string, body dto.CreatePost
 	// helper: rollback ทุกอย่างที่อาจสร้างไปแล้ว (best-effort)
 	rollback := func() {
 		_, _ = postsCol.DeleteOne(ctx, bson.M{"_id": post.ID})
-		_, _ = db.Collection("post_categories").DeleteMany(ctx, bson.M{"post_id": post.ID})
-		_, _ = db.Collection("post_role_visible").DeleteMany(ctx, bson.M{"post_id": post.ID})
-		_, _ = db.Collection("hashtags").DeleteMany(ctx, bson.M{"post_id": post.ID})
+		_, _ = database.DB.Collection("post_categories").DeleteMany(ctx, bson.M{"post_id": post.ID})
+		_, _ = database.DB.Collection("post_role_visible").DeleteMany(ctx, bson.M{"post_id": post.ID})
+		_, _ = database.DB.Collection("hashtags").DeleteMany(ctx, bson.M{"post_id": post.ID})
 	}
 
 	// 2) hashtags (non-critical; ลงทั้งตาราง post_hashtag และเก็บ string ใน post.Tags แล้ว)
-	if err := repo.RebuildHashtags(db, post, body.PostText, ctx); err != nil {
+	if err := repo.RebuildHashtags(database.DB, post, body.PostText, ctx); err != nil {
 		fmt.Println("⚠️ hashtag insert failed:", err)
 	}
 
 	// 3) categories (critical)
 	if len(body.CategoryIDs) > 0 {
-		if err := repo.ReplaceCategories(db, post.ID, body.CategoryIDs, ctx); err != nil {
+		if err := repo.ReplaceCategories(database.DB, post.ID, body.CategoryIDs, ctx); err != nil {
 			rollback()
 			return resp, err
 		}
@@ -117,14 +117,14 @@ func CreatePostWithMeta(client *mongo.Client, UserID string, body dto.CreatePost
 
 	// 4) role visibility (critical): ACCESS=private → บันทึกลง post_rolevisible โดยแปลง org_path → node_id (ObjectID)
 	if body.Visibility.Access == "private" {
-		if err := repo.ReplaceRoleVisibility(db, post.ID, body.Visibility, ctx); err != nil {
+		if err := repo.ReplaceRoleVisibility(database.DB, post.ID, body.Visibility, ctx); err != nil {
 			rollback()
 			return resp, err
 		}
 	}
 
 	// 5) ดึง user info (critical)
-	colUsers := db.Collection("users")
+	colUsers := database.DB.Collection("users")
 	userInfo, err := repo.FindUserInfo(colUsers, UserIDs, ctx)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -239,9 +239,7 @@ func GetPostDetail(ctx context.Context, db *mongo.Database, loginUserID bson.Obj
 		CreatedAt:    post.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    post.UpdatedAt.UTC().Format(time.RFC3339),
 		Status:       post.Status,
-		Isliked:   isLiked,
+		Isliked:      isLiked,
 	}
 	return out, nil
 }
-
-

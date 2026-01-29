@@ -11,15 +11,15 @@ import (
 )
 
 type MembershipSummary struct {
-	NodeID     bson.ObjectID
-	OrgPath    string
-	PosKey     string
+	NodeID  bson.ObjectID
+	OrgPath string
+	PosKey  string
 }
 
 type ViewerAccess struct {
-	Memberships     []MembershipSummary
-	SubtreePaths    []string        // รวม path ทั้งตัวเองและลูก
-	SubtreeNodeIDs  []bson.ObjectID // Node IDs ที่เข้าถึงได้ (ไว้ match role_visibility)
+	Memberships    []MembershipSummary
+	SubtreePaths   []string        // รวม path ทั้งตัวเองและลูก
+	SubtreeNodeIDs []bson.ObjectID // Node IDs ที่เข้าถึงได้ (ไว้ match role_visibility)
 }
 
 // -------------------------
@@ -28,8 +28,8 @@ type ViewerAccess struct {
 
 // BuildViewerAccess สร้างภาพรวมการเข้าถึงของผู้ใช้ปัจจุบัน
 func BuildViewerAccess(ctx context.Context, db *mongo.Database, userID bson.ObjectID) (*ViewerAccess, error) {
-	mCol     := db.Collection("memberships")
-	nodeCol  := db.Collection("org_units")
+	mCol := db.Collection("memberships")
+	nodeCol := db.Collection("org_units")
 
 	// 2) memberships ที่ active ของ user
 	cur, err := mCol.Find(ctx, bson.M{"user_id": userID, "active": true})
@@ -109,9 +109,9 @@ func BuildViewerAccess(ctx context.Context, db *mongo.Database, userID bson.Obje
 	slices.Sort(paths)
 
 	return &ViewerAccess{
-		Memberships:     summaries,
-		SubtreePaths:    paths,
-		SubtreeNodeIDs:  nodeIDs,
+		Memberships:    summaries,
+		SubtreePaths:   paths,
+		SubtreeNodeIDs: nodeIDs,
 	}, nil
 }
 

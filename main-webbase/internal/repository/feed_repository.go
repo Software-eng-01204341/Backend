@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"main-webbase/database"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -55,8 +56,7 @@ func ListAllPostsVisibleToViewer(
 	allowedRoleIDs []bson.ObjectID, // สิทธิ์ของผู้ดู (node/role IDs ที่เข้าถึงได้)
 ) (items []bson.M, next *string, err error) {
 
-	db := client.Database("unicom")
-	postsColl := db.Collection("posts")
+	postsColl := database.DB.Collection("posts")
 
 	// cursor match (created_at, _id)
 	var cursorMatch bson.D
@@ -76,9 +76,9 @@ func ListAllPostsVisibleToViewer(
 
 	// 3) pipeline หลัก
 	pipe := mongo.Pipeline{
-    bson.D{{Key: "$match", Value: bson.D{
-        {Key: "status", Value: "active"},
-    }}},
+		bson.D{{Key: "$match", Value: bson.D{
+			{Key: "status", Value: "active"},
+		}}},
 	}
 	if len(cursorMatch) > 0 {
 		pipe = append(pipe, bson.D{{Key: "$match", Value: cursorMatch}})
@@ -105,8 +105,8 @@ func ListAllPostsVisibleToViewer(
 			bson.D{{Key: "$expr", Value: bson.D{{Key: "$gt",
 				Value: bson.A{
 					bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{
-					bson.D{{Key: "$setIntersection", Value: bson.A{"$prv.node_id", allowedRoleIDs}}},
-					bson.A{},
+						bson.D{{Key: "$setIntersection", Value: bson.A{"$prv.node_id", allowedRoleIDs}}},
+						bson.A{},
 					}}}}},
 					0,
 				}}},
